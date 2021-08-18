@@ -127,7 +127,7 @@ void setup() {
 //  amphour_rom = 46000;
   ads.begin();
 
-  // initialize MCP (CAN)
+
   mcp2515.reset();
   bmsside.reset();
   mcp2515.setBitrate(CAN_1000KBPS);
