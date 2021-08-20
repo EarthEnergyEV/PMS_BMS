@@ -1,6 +1,5 @@
 #include<Arduino.h>
 #include <Wire.h>
-#include <Adafruit_ADS1015.h>
 #include <EEPROM.h>
 #include <mcp2515.h>
 
@@ -21,7 +20,7 @@ float amps_true = 0.0;
 float voltage_true = 0.0;
 float bms_amps_true = 0.0;
 float bms_voltage_true = 0.0;
-int soc=0;
+int soc = 0;
 int voltage_true_a, voltage_true_b, voltage_true_fin;
 
 unsigned long a, b, c;
@@ -33,8 +32,11 @@ double watthour = 0;
 double amphour = 0;
 double watthour_rom = 0;
 double amphour_rom = 0;
+
+// Hardcode AMPH and WATH here
 double watthour_preset = 3758;
 double amphour_preset = 52200;
+
 byte amps_true_send_a;
 byte amps_true_send_b;
 byte amps_true_send_c;
@@ -50,7 +52,6 @@ unsigned long canMessageTimer, canMessageTimerDelay = 50;
 int security = 3;
 int i;
 double offsetTemp = 0;
-Adafruit_ADS1115 ads(0x49);
 
 bool ignitionStatus = true;
 bool isACOn = true;
@@ -68,31 +69,31 @@ void session();
 void wattcalc();
 void checkCurrentCalibration();
 
-void setup() {
+void setup()
+{
   Serial.begin(9600);
-  // watthour=watthour_preset;
-  //Presetting code
-//  EEPROM.put(20, watthour_preset);
-//  EEPROM.put(40, amphour_preset);
-//  watthour_preset = 2462;
-//  amphour_preset = 41608;
-//  EEPROM.put(0, watthour_preset);
-//  EEPROM.put(10, amphour_preset);
-//  while(true){}
+
+  //Presetting code for EEPROM
+  //  EEPROM.put(20, watthour_preset);
+  //  EEPROM.put(40, amphour_preset);
 
   double watthr_rom_temp;
   double amphr_rom_temp;
   EEPROM.get( 0, watthr_rom_temp);
   EEPROM.get(10, amphr_rom_temp);
-  if(!isnan(watthr_rom_temp)) {
+  if (!isnan(watthr_rom_temp))
+  {
     watthour_rom = watthr_rom_temp;
-  } else {
+  } else
+  {
     watthour_rom = 0;
     EEPROM.put( 0, 0);
   }
-  if(!isnan(amphr_rom_temp)) {
+  if (!isnan(amphr_rom_temp))
+  {
     amphour_rom = amphr_rom_temp;
-  } else {
+  } else
+  {
     amphour_rom = 0;
     EEPROM.put( 10, 0);
   }
@@ -102,44 +103,39 @@ void setup() {
   EEPROM.get( 20, watthr_preset_temp);
   EEPROM.get(40, amphr_preset_temp);
 
-  if(!isnan(watthr_preset_temp)) {
+  if (!isnan(watthr_preset_temp))
+  {
     watthour_preset = watthr_preset_temp;
-  } else {
+  } else
+  {
     EEPROM.put(20, watthour_preset);
   }
 
-  if(!isnan(amphr_preset_temp)) {
+  if (!isnan(amphr_preset_temp))
+  {
     amphour_preset = amphr_preset_temp;
-  } else {
+  } else
+  {
     EEPROM.put(40, amphour_preset);
   }
 
   double offsetTemp = 0;
   EEPROM.get(50, offsetTemp);
-  if(!isnan(offsetTemp)) {
+  if (!isnan(offsetTemp))
+  {
     calibrationOffset = offsetTemp;
-  } else {
+  } else
+  {
     EEPROM.put(50, calibrationOffset);
   }
-  //Serial.print("Current Calibration Offset = ");
-  //Serial.println(calibrationOffset);
-  //watthour_rom=8736;
-//  amphour_rom = 46000;
-  ads.begin();
 
-
+  // CAN Initialize
   mcp2515.reset();
   bmsside.reset();
   mcp2515.setBitrate(CAN_1000KBPS);
   bmsside.setBitrate(CAN_500KBPS);
   mcp2515.setNormalMode();
   bmsside.setNormalMode();
-
-  // Initialize Outputs
-  pinMode(ledpn, OUTPUT);
-  digitalWrite(ledpn, HIGH);
-  delay(500);
-  digitalWrite(ledpn, LOW);
 
   // Initialize CAN messages
   canMsg1.can_id  = 0x095;
@@ -150,28 +146,25 @@ void setup() {
 
   delay(1000);
   canMessageTimer = millis();
-
 }
 
 void loop()
 {
-
   // Put watthour and amphour in EEPROM
   EEPROM.put( 0, watthour);
   EEPROM.put(10, amphour);
-  // bmsvalues();
   wattcalc();
   //secure();
   session();
   checkCurrentCalibration();
 
   // Keep sending the CAN message after some delay
-  if(millis() - canMessageTimer >= canMessageTimerDelay) {
+  if (millis() - canMessageTimer >= canMessageTimerDelay) {
     bmsvalues();
     sender();
     canMessageTimer = millis();
   }
-  
+
   commands();
 
 }
@@ -180,12 +173,12 @@ void loop()
 void checkCurrentCalibration() {
 
   // return in no need to calibrate
-  if(!needToCalibrate) {
+  if (!needToCalibrate) {
     return;
   }
 
   // Do not attempt to calibrate if ignition is ON
-  if(ignitionStatus) {
+  if (ignitionStatus) {
     Serial.println("Ignition On Detected skipping Calibration...");
     calibrationInterval = millis();
     calibrationIndex = 0;
@@ -193,7 +186,7 @@ void checkCurrentCalibration() {
   }
 
   // Do not attempt to calibrate if charger is ON
-  if(isACOn) {
+  if (isACOn) {
     Serial.println("Charger Detected skipping Calibration...");
     calibrationInterval = millis();
     calibrationIndex = 0;
@@ -201,13 +194,13 @@ void checkCurrentCalibration() {
   }
 
   // Useless... just to debug that it has started to attempt calibration
-  if(calibrationIndex == 0) {
+  if (calibrationIndex == 0) {
     Serial.println("Attempting to Calibrate...");
   }
 
   //G9et the current value after some interval
-  if(abs(millis() - calibrationTimer) >= calibrationInterval) {
-    
+  if (abs(millis() - calibrationTimer) >= calibrationInterval) {
+
     // store the current value at that instance in array and reset the timer
     calibrationTimer = millis();
 
@@ -217,10 +210,10 @@ void checkCurrentCalibration() {
     calibrationIndex = (calibrationIndex + 1) % 15;
 
     // Stuff to do when we get 10 current values. i.e. the array is full
-    if(calibrationIndex >= 10) {
+    if (calibrationIndex >= 10) {
       // get average of all the values in the array
       offsetTemp = 0;
-      for(i = 0; i < 10; i++) {
+      for (i = 0; i < 10; i++) {
         offsetTemp += calibrationValues[i];
       }
       offsetTemp = offsetTemp / 10.0;
@@ -253,13 +246,6 @@ void sender()
   watthour_c = (watthour_fin & 0x00FF0000) >> 16;
   watthour_d = (watthour_fin & 0xFF000000) >> 24;
 
- // don't know ye kya he contact Elnino Rosario or Rahul Maurya
-  amphour_fin = amphour * 100;
-
-  // to monitor values using bluetooth
-  // Serial.print(" Amp hour:   ");
-  // Serial.print(amphour_fin);
-
   //printnaidekhna
   Serial.print("V:   ");
   Serial.print(voltage_true);
@@ -267,11 +253,13 @@ void sender()
   Serial.print("A:  ");
   Serial.print(amps_true);
   Serial.print(" ");
-
   Serial.print("whr: ");
   Serial.print(watthour);
   Serial.print("mah:   ");
   Serial.println(amphour);
+
+  // don't know ye kya he contact Elnino Rosario or Rahul Maurya
+  amphour_fin = amphour * 100;
 
   //split the amphour values so that we can send it on CAN (8 bit ka limit he)
   amphour_a = (amphour_fin & 0x000000FF);
@@ -292,63 +280,55 @@ void sender()
   canMsg2.data[0] = voltage_true_a;
   canMsg2.data[1] = voltage_true_b;
 
-//split the current values so that we can send it on CAN (8 bit ka limit he) (idar wapis kiya he coz upar wale method me issue tha overflow ka)
+  //split the current values so that we can send it on CAN (8 bit ka limit he) (idar wapis kiya he coz upar wale method me issue tha overflow ka)
   float amps_true_temp = amps_true * 1000.0;
   amps_true_send_a = (int32_t)amps_true_temp & 0xFF;
   amps_true_send_b = ((int32_t)amps_true_temp & 0xFF00) >> 8;
   amps_true_send_c = ((int32_t)amps_true_temp & 0xFF0000) >> 16;
   amps_true_send_d = ((int32_t)amps_true_temp & 0xFF000000) >> 24;
-//  //Serial.print(" Current Fin A:  ");
-//  //Serial.print(amps_true_send_a);
-//  //Serial.print(" ");
-//  //Serial.print(" Current Fin B:  ");
-//  //Serial.print(amps_true_send_b);
-//  //Serial.print(" ");
-//  //Serial.print(" Current Fin C:  ");
-//  //Serial.print(amps_true_send_c);
-//  //Serial.print(" ");
-//  //Serial.print(" Current Fin D:  ");
-//  //Serial.print(amps_true_send_d);
-//  //Serial.print(" ");
-//  //Serial.print(" Current Fin Reverted:  ");
-//  //Serial.print((float)(amps_true_send_a | (amps_true_send_b << 8) | (amps_true_send_c << 16) | (amps_true_send_d << 24)) /1000.0);
-//  Serial.println(" ");
-// assign the values to can data bytes
+  //  //Serial.print(" Current Fin A:  ");
+  //  //Serial.print(amps_true_send_a);
+  //  //Serial.print(" ");
+  //  //Serial.print(" Current Fin B:  ");
+  //  //Serial.print(amps_true_send_b);
+  //  //Serial.print(" ");
+  //  //Serial.print(" Current Fin C:  ");
+  //  //Serial.print(amps_true_send_c);
+  //  //Serial.print(" ");
+  //  //Serial.print(" Current Fin D:  ");
+  //  //Serial.print(amps_true_send_d);
+  //  //Serial.print(" ");
+  //  //Serial.print(" Current Fin Reverted:  ");
+  //  //Serial.print((float)(amps_true_send_a | (amps_true_send_b << 8) | (amps_true_send_c << 16) | (amps_true_send_d << 24)) /1000.0);
+  //  Serial.println(" ");
+  // assign the values to can data bytes
   canMsg2.data[2] = amps_true_send_a;
   canMsg2.data[3] = amps_true_send_b;
   canMsg2.data[6] = amps_true_send_c;
   canMsg2.data[5] = amps_true_send_d;
 
-  //  canMsg2.data[5] = ;
-  //  canMsg2.data[6] = ;
-  //  canMsg2.data[7] = ;
-
   // send the messasges on CAN
   mcp2515.sendMessage(&canMsg1);
   mcp2515.sendMessage(&canMsg2);
-
-
-
-  //  amphour=amphour+0.001;
-    //watthour=watthour_preset;
 }
 
 
 void bmsvalues()
 {
   if (bmsside.readMessage(&canMsg) == MCP2515::ERROR_OK) {
-    if(canMsg.can_id==0x98FF28F4){
+    if (canMsg.can_id == 0x98FF28F4)
+    {
 
 
-      for (int i = 0; i<canMsg.can_dlc; i++)  {  // print the data
+      for (int i = 0; i < canMsg.can_dlc; i++)  { // print the data
 
-      bms_amps_true=(5000-((256.0*canMsg.data[3])+canMsg.data[2]))/10.0;//BMS wala ncurrent
-      // Serial.print(bms_amps_true);
-      // Serial.print("  ");
-      bms_voltage_true=(((256.0*canMsg.data[5])+canMsg.data[4]))/10.0;//BMS wala Voltage
-      // Serial.println(bms_voltage_true);
-      soc=canMsg.data[1];//SOC
-      // Serial.println(soc);
+        bms_amps_true = (5000 - ((256.0 * canMsg.data[3]) + canMsg.data[2])) / 10.0; //BMS wala ncurrent
+        // Serial.print(bms_amps_true);
+        // Serial.print("  ");
+        bms_voltage_true = (((256.0 * canMsg.data[5]) + canMsg.data[4])) / 10.0; //BMS wala Voltage
+        // Serial.println(bms_voltage_true);
+        soc = canMsg.data[1]; //SOC
+        // Serial.println(soc);
 
       }
     }
@@ -364,7 +344,7 @@ void commands()
   if (mcp2515.readMessage(&canMsg) == MCP2515::ERROR_OK)
   {
     // to change the preset values
-    if(canMsg.can_id == 0x97) {
+    if (canMsg.can_id == 0x97) {
       amphour_preset_a = canMsg.data[0];
       amphour_preset_b = canMsg.data[1];
       amphour_preset_c = canMsg.data[2];
@@ -377,28 +357,28 @@ void commands()
       double amphour_temp, watthour_temp;
       amphour_temp = amphour_preset_a + (amphour_preset_b << 8) + (amphour_preset_c << 16) + (amphour_preset_d << 24);
       watthour_temp = watthour_preset_a + (watthour_preset_b << 8) + (watthour_preset_c << 16) + (watthour_preset_d << 24);
-      
+
       watthour_preset = watthour_temp;
       amphour_preset = amphour_temp;
 
       watthour_rom = watthour_preset;
       amphour_rom = amphour_preset;
-      
-      EEPROM.put(20,watthour_preset);
-      EEPROM.put(40,amphour_preset);
+
+      EEPROM.put(20, watthour_preset);
+      EEPROM.put(40, amphour_preset);
     }
 
     // reading ignition and charging status for calibration purposes
-    if(canMsg.can_id == 0x072) {
+    if (canMsg.can_id == 0x072) {
       ignitionStatus = canMsg.data[1] & 0x01;
       isACOn = canMsg.data[1] & 0x02;
 
       //Calibration related
       // check whether ignition and charging is not on
-      if(!ignitionStatus && !isACOn) {
+      if (!ignitionStatus && !isACOn) {
         // if both of them are not on then check the current value, if the values are outside the threshold then we need to calibrate
-        if(amps_true < IDLE_AMPS_VALUE*2.5 || amps_true > 0) {
-          if(!needToCalibrate) {
+        if (amps_true < IDLE_AMPS_VALUE * 2.5 || amps_true > 0) {
+          if (!needToCalibrate) {
             needToCalibrate = true;
             calibrationTimer = millis();
             calibrationIndex = 0;
@@ -420,14 +400,14 @@ void commands()
         amphour_rom = 0;
         amphour = 0;
         watthour = 0;
-        EEPROM.put(0,0);
-        EEPROM.put(10,0);
+        EEPROM.put(0, 0);
+        EEPROM.put(10, 0);
         //Serial.println("you asked for this on CAN .............................................. the data is gone forever..............................................");
       }
       if (canMsg.data[1] == 6)
       {
-        EEPROM.put(0,watthour_preset);
-        EEPROM.put(10,amphour_preset);
+        EEPROM.put(0, watthour_preset);
+        EEPROM.put(10, amphour_preset);
         watthour_rom = watthour_preset;
         amphour_rom = amphour_preset;
         wattsec = 0;
@@ -467,8 +447,8 @@ void session()
       amphour_rom = 0;
       amphour = 0;
       watthour = 0;
-      EEPROM.put(0,0);
-      EEPROM.put(10,0);
+      EEPROM.put(0, 0);
+      EEPROM.put(10, 0);
       //Serial.println("you asked for this .............................................. the data is gone forever..............................................");
     }
 
@@ -486,8 +466,8 @@ void session()
     // set amphour and watthour values to the preset values
     if (i == 'p' && security)
     {
-      EEPROM.put(0,watthour_preset);
-      EEPROM.put(10,amphour_preset);
+      EEPROM.put(0, watthour_preset);
+      EEPROM.put(10, amphour_preset);
       watthour_rom = watthour_preset;
       amphour_rom = amphour_preset;
       wattsec = 0;
@@ -516,63 +496,8 @@ void wattcalc()
   a = millis();
   c = a - b;
   b = a;
-  uint16_t adc0, adc1, adcv; // we read from the ADC, we have a sixteen bit integer as a result
-
-  // read the adc values
-  // adc0 = current adc value
-  // adc1 = adc of voltage reference given to CT
-  // adcv = adc of voltage of battery
-  adc0 = ads.readADC_SingleEnded(0);
-  adc1 = ads.readADC_SingleEnded(1);
-  adcv = ads.readADC_SingleEnded(2) + 15;
-
-  // amps1 = ((Voltage * 1000.0 + 3.19) * 5) / 99.75;
-  // amps1 = (Voltage + 124) * 5 / calibrationScale + calibrationOffset; // 280 - 0.91; // 160 + 0.95; 
-//  double dummy = map(adc0, 11550.0, 15150.0, -300.0, 300.0);
-
-  // take the difference of current adc value and reference value
-  double raw = adc0;
-  double rawVref = adc1;
-  double diff = rawVref - raw;
-//  double dummy = (13350 - raw) / 34.0;
-//  double dummy = 0.0295*diff + 0.2204;
-
-  // refer to CT_Calibration_data.xlsx for the derivation of this equation
-  double dummy = 0.0000000006*diff*diff*diff + 0.0000006*diff*diff + 0.0294*diff + calibrationOffset;
-
-//  if(dummy > 0) {
-//    dummy += 0.14;
-//  } else {
-//    dummy += 0.1;
-//  }
-  
-  // average out last 5 current values
-  // ampsArr[ampsArrPointer] = dummy;
-  // ampsArrPointer = (ampsArrPointer + 1) % 5;
-  // double averagedAmps = 0;
-  // for(int i = 0; i < 5; i++) {
-  //   averagedAmps += ampsArr[i];
-  // }
-  // averagedAmps = averagedAmps / 5.0;
 
   amps_true = bms_amps_true; //idar
-  // if(amps_true < 0.09 && amps_true > -0.15) {
-  //   amps_true = -0.01;
-  // }
-  ////Serial.println(amps1);
-//  if(amps_true > calibrationIgnitionOffValue + 0.5 || amps_true < calibrationIgnitionOffValue - 0.5) {
-//    isCalibrated = false;
-//  }
-//  if ((amps1 >= -0.10 && amps1 <= 0.10 ) || amps1 > 300)
-//  {
-//    amps_true = 0;
-//  }
-
-  
-  // read and convert voltage values from adc value to Volts
-  // Voltage = ((adcv));
-  // Voltage = Voltage ;
-  // voltage_true = (Voltage - 13) * 30 / 7622;
   voltage_true = bms_voltage_true;// idar
   watts = voltage_true * amps_true;
 
@@ -580,9 +505,6 @@ void wattcalc()
     watts = 0;
   calc = c * watts;
 
-  // calc = watt-millisecond
-  // keep on adding calc into wattsec every loop
-  // similar logic for amp-millisecond
   wattsec = wattsec + calc; //millisecond actually
   ampsec = ampsec + c * amps_true; //milli second actually
 
@@ -590,7 +512,7 @@ void wattcalc()
   watthour = watthour_rom + wattsec / 3600000.0;
   amphour = amphour_rom + ampsec / 3600.0; //milliamp hour actually
 
- // constrain amp-hour and watt-hour in between 0 and the respective preset values.
+  // constrain amp-hour and watt-hour in between 0 and the respective preset values.
   watthour = constrain(watthour, 0, watthour_preset);
   amphour = constrain(amphour, 0, amphour_preset);
 }
